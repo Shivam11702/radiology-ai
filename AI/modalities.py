@@ -37,25 +37,29 @@ MODALITY_MODELS = {
         "name": "DenseNet121 / CheXNet",
         "dataset": "ChestX-ray14 + NIH + MIMIC",
         "task": "multi-pathology thoracic classification",
-        "type": "Deep PyTorch CNN (DenseNet121)",
+        "type": "Production MVP (DenseNet121)",
+        "status": "live",
     },
     "CT": {
-        "name": "CTNoduleNet (Deep Residual CNN)",
-        "dataset": "LIDC-IDRI / DeepLesion",
-        "task": "lung nodule screening + 3D discrete voxel mass integration",
-        "type": "Deep PyTorch CNN (Residual ConvNet)",
+        "name": "Chest CT DenseNet121",
+        "dataset": "Chest CT scan images (4 classes)",
+        "task": "research baseline classification (adenocarcinoma, large_cell, normal, squamous)",
+        "type": "Research Baseline (DenseNet121)",
+        "status": "research_baseline (disabled by default; requires ENABLE_BASELINE_MODELS=1)",
     },
     "MR": {
-        "name": "BrainMRINet (Deep Residual CNN)",
-        "dataset": "BraTS / TCGA-GBM",
-        "task": "intracranial neoplasm detection + hemispheric volumetric mass",
-        "type": "Deep PyTorch CNN (Residual ConvNet)",
+        "name": "Brain MRI DenseNet121",
+        "dataset": "Brain Tumor MRI Dataset (4 classes)",
+        "task": "research baseline classification (glioma, meningioma, notumor, pituitary)",
+        "type": "Research Baseline (DenseNet121)",
+        "status": "research_baseline (disabled by default; requires ENABLE_BASELINE_MODELS=1)",
     },
     "US": {
-        "name": "UltrasoundBIRADSNet (Deep Residual CNN)",
+        "name": "Breast Ultrasound DenseNet121",
         "dataset": "BUSI (Breast Ultrasound)",
-        "task": "sonographic acoustic morphology & BI-RADS categorization",
-        "type": "Deep PyTorch CNN (Residual ConvNet)",
+        "task": "research baseline classification (benign, malignant, normal)",
+        "type": "Research Baseline (DenseNet121)",
+        "status": "research_baseline (disabled by default; requires ENABLE_BASELINE_MODELS=1)",
     },
 }
 
@@ -89,10 +93,9 @@ def detect_modality_from_file(image_path: str, declared: str | None = None) -> s
 # ---------------------------------------------------------------------------
 
 def predict_ct(image_path: str, hint_name: str | None = None) -> dict:
-    """
-    CT Chest lung nodule screening with CTNoduleNet deep neural network
-    and discrete 3D voxel mass integration.
-    """
+    """CT baseline inference if ENABLE_BASELINE_MODELS=1, else fail closed."""
+    from predict import predict_baseline
+    return predict_baseline("ct", image_path)
     gray = load_image(image_path)
     from montage_detector import detect_montage_grid
     is_montage, grid_meta = detect_montage_grid(gray)
@@ -197,10 +200,9 @@ def predict_ct(image_path: str, hint_name: str | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 def predict_mri(image_path: str, hint_name: str | None = None) -> dict:
-    """
-    Brain MRI intracranial lesion screening with BrainMRINet deep neural network
-    and BraTS-style volumetric integration.
-    """
+    """MRI baseline inference if ENABLE_BASELINE_MODELS=1, else fail closed."""
+    from predict import predict_baseline
+    return predict_baseline("mri", image_path)
     gray = load_image(image_path)
     from montage_detector import detect_montage_grid
     is_montage, grid_meta = detect_montage_grid(gray)
@@ -301,10 +303,9 @@ def predict_mri(image_path: str, hint_name: str | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 def predict_ultrasound(image_path: str, hint_name: str | None = None) -> dict:
-    """
-    Breast ultrasound lesion evaluation with UltrasoundBIRADSNet deep neural network
-    and ACR BI-RADS categorization.
-    """
+    """Ultrasound baseline inference if ENABLE_BASELINE_MODELS=1, else fail closed."""
+    from predict import predict_baseline
+    return predict_baseline("us", image_path)
     gray = load_image(image_path)
     tensor = _prepare_tensor(gray)
     model = get_ultrasound_model()

@@ -27,6 +27,8 @@ def _resolve_image_path(file_path: str) -> tuple[str, Path | None]:
 
 
 def run_gradcam_only(image_path: str, study_id: int, target_label: str = "Pneumonia", modality: str = "XR") -> str:
+    if (modality or "").upper() in {"CT", "MR", "MRI", "US"}:
+        raise RuntimeError("Grad-CAM not available for baseline models")
     readable, temp_file = _resolve_image_path(image_path)
     try:
         processed = preprocess_image(readable)
@@ -78,7 +80,7 @@ def run_prediction_only(image_path: str, modality: str | None = None, original_f
         if not prediction.get("is_valid", True) or prediction.get("primary_label") == "Invalid Image Rejected":
             raise ValueError(prediction.get("rejection_reason") or "Uploaded file is not a valid medical scan.")
         return prediction
-    except ValueError:
+    except (ValueError, RuntimeError):
         raise
     except Exception as exc:
         raise ValueError("Inference failed for unsupported or corrupted image") from exc
@@ -102,7 +104,10 @@ def run_full_analysis(
         processed = preprocess_image(readable)
         effective_modality = prediction.get("modality", "XR")
 
-        if prediction.get("primary_label") in ("Modality Mismatch", "Invalid Image Rejected"):
+        if (
+            prediction.get("primary_label") in ("Modality Mismatch", "Invalid Image Rejected")
+            or prediction.get("status") == "research_baseline"
+        ):
             heatmap_path = None
             telemetry = prediction.get("telemetry", {})
         else:
@@ -121,7 +126,7 @@ def run_full_analysis(
         report = generate_report(
             primary_label=prediction["primary_label"],
             confidence=prediction["confidence"],
-            severity=prediction["severity"],
+            severity=prediction.get("severity"),
             differential=prediction["differential_diagnosis"],
             output_dir=str(settings.report_dir),
             study_id=study_id,
@@ -139,7 +144,7 @@ def run_full_analysis(
         )
 
         return {**prediction, "heatmap_path": heatmap_path, "report": report, "telemetry": telemetry}
-    except ValueError:
+    except (ValueError, RuntimeError):
         raise
     except Exception as exc:
         raise ValueError("Analysis pipeline failed") from exc

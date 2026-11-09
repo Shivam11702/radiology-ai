@@ -118,8 +118,8 @@ def analyze_study(db: Session, study_id: int, user: User | None = None) -> Analy
         study_id=study.id,
         primary_label=result["primary_label"],
         confidence=result["confidence"],
-        severity=result["severity"],
-        uncertainty_level=result["uncertainty_level"],
+        severity=result.get("severity"),
+        uncertainty_level=result.get("uncertainty_level"),
         differential_diagnosis=json.dumps({
             "differential": result["differential_diagnosis"],
             "all_findings": result.get("all_findings", []),
@@ -127,6 +127,13 @@ def analyze_study(db: Session, study_id: int, user: User | None = None) -> Analy
             "anatomy_detection": result.get("anatomy_detection"),
             "raw_scores": result.get("raw_scores"),
             "telemetry": result.get("telemetry"),
+            "calibrated": result.get("calibrated"),
+            "in_review_band": result.get("in_review_band"),
+            "status": result.get("status"),
+            "all_scores": result.get("all_scores"),
+            "disclaimer": result.get("disclaimer"),
+            "model_metrics": result.get("model_metrics"),
+            "modality_warning": result.get("modality_warning"),
         }),
         heatmap_path=result.get("heatmap_path"),
         model_version=result.get("model_version"),
@@ -332,6 +339,13 @@ def _parse_diagnosis_json(raw: str | None) -> tuple[list, list, dict]:
         "anatomy_detection": data.get("anatomy_detection"),
         "raw_scores": data.get("raw_scores") or {},
         "telemetry": data.get("telemetry") or {},
+        "calibrated": data.get("calibrated"),
+        "in_review_band": data.get("in_review_band"),
+        "status": data.get("status"),
+        "all_scores": data.get("all_scores"),
+        "disclaimer": data.get("disclaimer"),
+        "model_metrics": data.get("model_metrics"),
+        "modality_warning": data.get("modality_warning"),
     }
     return data.get("differential", []), data.get("all_findings", []), meta
 
@@ -358,6 +372,13 @@ def _prediction_to_response(prediction: Prediction) -> PredictionResponse:
         modality_validation=meta.get("modality_validation"),
         anatomy_detection=meta.get("anatomy_detection"),
         volumetrics=volumetrics,
+        calibrated=meta.get("calibrated"),
+        in_review_band=meta.get("in_review_band"),
+        status=meta.get("status"),
+        all_scores=meta.get("all_scores"),
+        disclaimer=meta.get("disclaimer"),
+        model_metrics=meta.get("model_metrics"),
+        modality_warning=meta.get("modality_warning"),
         created_at=prediction.created_at,
     )
 

@@ -1,10 +1,13 @@
 """Image preprocessing for chest X-ray analysis."""
 
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
 from PIL import Image
+import torch
+from torchvision import transforms as T
 
 try:
     import pydicom
@@ -189,18 +192,105 @@ def normalize_xrv(img: np.ndarray) -> np.ndarray:
     return norm[np.newaxis, :, :].astype(np.float32)
 
 
+def normalize_xrv_standard(g: np.ndarray) -> np.ndarray:
+    """Scale a uint8 grayscale image to the standard TorchXRayVision [-1024, 1024] range.
+
+    Unlike normalize_xrv this function does NOT perform per-image min/max
+    rescaling first; it assumes the input is already a uint8 image (values
+    0-255) and applies the same fixed linear mapping that the published
+    torchxrayvision pre-processing uses:
+
+        out = (2 * (g / 255) - 1) * 1024   ->   range [-1024, 1024]
+
+    The result is returned as a (1, H, W) float32 array ready to be batched
+    into a 4-D tensor.  Call normalize_xrv (the per-image variant) for the
+    CT/MRI/US modality pipelines; use this function for the chest-XR
+    DenseNet121 path so that the input distribution matches the training data.
+    """
+    return ((2.0 * (g.astype(np.float32) / 255.0) - 1.0) * 1024.0)[np.newaxis]
+
+
 def preprocess_image(image_path: str, size: int = 224) -> np.ndarray:
     """
     Full preprocessing pipeline for TorchXRayVision DenseNet121:
-    load -> CLAHE -> denoise -> resize -> normalize to [-1024, 1024] float32 1xHxW
+    load -> resize to 224 -> normalize_xrv_standard to [-1024, 1024] float32 (1, H, W)
+
+    CLAHE and denoising are intentionally omitted here so that the pixel
+    statistics presented to the model match the torchxrayvision training
+    distribution.  The heavy morphological pipeline is preserved via
+    normalize_xrv for the CT/MRI/US branches.
     """
     try:
         gray = load_image(image_path)
-        enhanced = apply_clahe(gray)
-        cleaned = denoise(enhanced)
-        resized = cv2.resize(cleaned, (size, size), interpolation=cv2.INTER_AREA)
-        return normalize_xrv(resized)
+        resized = cv2.resize(gray, (size, size), interpolation=cv2.INTER_AREA)
+        return normalize_xrv_standard(resized)
     except ValueError:
         raise
     except Exception as exc:
         raise ValueError("Image preprocessing failed for unsupported or corrupted file") from exc
+
+
+# ---------------------------------------------------------------------------
+# Baseline Evaluation Preprocessing (CT, US, MRI)
+# ---------------------------------------------------------------------------
+
+_EVAL_MEAN = [0.485, 0.456, 0.406]
+_EVAL_STD = [0.229, 0.224, 0.225]
+
+_BASELINE_EVAL_TF = T.Compose([
+    T.Resize((224, 224)),
+    T.ToTensor(),
+    T.Normalize(mean=_EVAL_MEAN, std=_EVAL_STD),
+])
+
+
+def pad_square(im: Image.Image) -> Image.Image:
+    """Pad PIL image to square with black fill (0,0,0) and image centered."""
+    w, h = im.size
+    s = max(w, h)
+    if w == h:
+        return im
+    out = Image.new("RGB", (s, s), (0, 0, 0))
+    out.paste(im, ((s - w) // 2, (s - h) // 2))
+    return out
+
+
+def preprocess_for(name: str, image: Any) -> torch.Tensor:
+    """Preprocess image for DenseNet121 baseline models (CT, US, MRI).
+
+    Returns a float32 PyTorch tensor of shape (1, 3, 224, 224).
+    - CT and US: Image.convert("RGB") -> pad_square -> Resize((224,224)) -> ToTensor -> Normalize
+    - MRI: Image.convert("RGB") -> Resize((224,224)) -> ToTensor -> Normalize (NO padding)
+    """
+    key = name.lower()
+    if key in {"mr", "mri"}:
+        norm_name = "mri"
+    elif key in {"us", "ultrasound"}:
+        norm_name = "us"
+    elif key in {"ct"}:
+        norm_name = "ct"
+    else:
+        raise ValueError(f"Unknown baseline model name: {name}. Must be 'mri', 'us', or 'ct'.")
+
+    if isinstance(image, (str, Path)):
+        p = Path(image)
+        try:
+            im = Image.open(p).convert("RGB")
+        except Exception:
+            gray = load_image(str(p))
+            im = Image.fromarray(gray).convert("RGB")
+    elif isinstance(image, Image.Image):
+        im = image.convert("RGB")
+    elif isinstance(image, np.ndarray):
+        im = Image.fromarray(image).convert("RGB")
+    else:
+        raise TypeError(f"Unsupported image type: {type(image)}")
+
+    if norm_name in {"ct", "us"}:
+        im = pad_square(im)
+
+    tensor = _BASELINE_EVAL_TF(im)
+    if not isinstance(tensor, torch.Tensor):
+        tensor = torch.from_numpy(np.array(tensor))
+    return tensor.unsqueeze(0).float()
+

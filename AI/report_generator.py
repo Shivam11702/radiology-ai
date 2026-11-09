@@ -131,8 +131,16 @@ def _build_dynamic_findings(
     telemetry: dict[str, Any] | None,
     all_findings: list[dict] | None,
     extra: str = "",
+    model_version: str | None = None,
 ) -> str:
     """Build dynamic, data-driven medical findings tailored to detected anatomy and metrics."""
+    if "Research Baseline" in str(model_version) or extra == "research_baseline":
+        return (
+            f"RESEARCH BASELINE (NOT CLINICALLY VALIDATED): {modality} DenseNet121 model trained on public dataset only. "
+            f"Predicted dataset class: {primary_label} (uncalibrated probability: {confidence:.1%}).<br/>"
+            f"DISCLAIMER: Probabilities are uncalibrated and baseline classifiers produce confident answers on wrong-modality images. "
+            f"This model has not been clinically validated and must not be used for diagnostic interpretation."
+        )
     tel = telemetry or {}
     loc = tel.get("anatomical_location") or "the visualized field"
     diam = tel.get("diameter_mm")
@@ -279,15 +287,20 @@ def _build_dynamic_impression(
     modality: str,
     primary_label: str,
     confidence: float,
-    severity: str | None,
-    all_findings: list[dict] | None,
-    telemetry: dict[str, Any] | None,
+    severity: str | None = None,
+    all_findings: list[dict] | None = None,
+    telemetry: dict[str, Any] | None = None,
+    model_version: str | None = None,
 ) -> str:
     """Synthesize evidence-based clinical impression with actionable recommendations."""
+    if "Research Baseline" in str(model_version):
+        return (
+            f"1. Research baseline classification output: {primary_label}. Not clinically validated for diagnostic use.<br/>"
+            f"2. Independent review by a licensed radiologist is required."
+        )
     tel = telemetry or {}
     loc = tel.get("anatomical_location") or "visualized field"
     conf_pct = round(confidence * 100, 1)
-    sev_str = f" ({severity} severity)" if severity else ""
 
     if modality == "CT":
         if "No Acute" in primary_label:
@@ -305,7 +318,7 @@ def _build_dynamic_impression(
             fleischner = "Recommend follow-up low-dose CT chest in 6 to 12 months per Fleischner Society guidelines."
 
         return (
-            f"1. <b>{primary_label}</b> identified in the {loc} with {conf_pct}% AI confidence{sev_str}.<br/>"
+            f"1. <b>{primary_label}</b> identified in the {loc} with {conf_pct}% AI confidence.<br/>"
             f"2. {fleischner}<br/>"
             f"3. Correlate with smoking history, prior baseline imaging, and occupational exposures."
         )
@@ -361,7 +374,7 @@ def _build_dynamic_impression(
         )
 
     return (
-        f"1. <b>{primary_label}</b> involving the {loc} with <b>{conf_pct}%</b> AI confidence{sev_str}.<br/>"
+        f"1. <b>{primary_label}</b> involving the {loc} with <b>{conf_pct}%</b> AI confidence.<br/>"
         "2. Review Grad-CAM explainability overlay for regional anatomical correlation.<br/>"
         "3. Correlate with clinical history, auscultation findings, and laboratory inflammatory markers.<br/>"
         "4. Formal sign-off and follow-up imaging recommended."
@@ -524,10 +537,10 @@ def _findings_table(all_findings: list[dict] | None) -> Table | None:
 def generate_report(
     primary_label: str,
     confidence: float,
-    severity: str | None,
-    differential: list[dict],
-    output_dir: str,
-    study_id: int,
+    differential: list[dict] | None = None,
+    output_dir: str = '',
+    study_id: int = 0,
+    severity: str | None = None,
     all_findings: list[dict] | None = None,
     extra: str = "",
     modality: str = "XR",
@@ -557,6 +570,7 @@ def generate_report(
         telemetry=telemetry,
         all_findings=all_findings,
         extra=extra,
+        model_version=model_version,
     )
 
     impression = _build_dynamic_impression(
@@ -566,6 +580,7 @@ def generate_report(
         severity=effective_severity,
         all_findings=all_findings,
         telemetry=telemetry,
+        model_version=model_version,
     )
 
     meta = {

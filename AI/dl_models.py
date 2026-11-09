@@ -10,19 +10,24 @@ Provides specialized PyTorch deep convolutional architectures for:
 Each model implements:
 - Standardized PyTorch forward pass (eval mode)
 - Target convolutional layer for Captum LayerGradCam explainability
-- Clinically calibrated logits and probability outputs
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import os
+import traceback
 from pathlib import Path
 from typing import Any, Tuple
+
+_logger = logging.getLogger(__name__)
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision import models
 
 WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "weights"
 
@@ -281,7 +286,7 @@ class XRChestNet(nn.Module):
         "Atelectasis",
         "Pneumothorax",
         "Pulmonary Nodule",
-        "Lung Cancer",
+        "Mass / nodular opacity",
         "Lung Lesion",
         "Pleural Thickening",
         "Pulmonary Fibrosis",
@@ -356,108 +361,192 @@ def _init_weights_deterministic(model: nn.Module, seed: int = 42):
 
 
 def get_ct_model() -> CTNoduleNet:
-    """Retrieve cached CTNoduleNet model, loading state_dict from weights/ if available."""
-    global _MODEL_CACHE
-    if "CT" in _MODEL_CACHE:
-        return _MODEL_CACHE["CT"]  # type: ignore
-
-    model = CTNoduleNet()
-    weight_file = WEIGHTS_DIR / "ct_nodulenet.pt"
-    if weight_file.exists():
-        try:
-            state = torch.load(weight_file, map_location="cpu", weights_only=True)
-            model.load_state_dict(state)
-        except Exception:
-            _init_weights_deterministic(model, seed=101)
-    else:
-        _init_weights_deterministic(model, seed=101)
-        WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-        try:
-            torch.save(model.state_dict(), weight_file)
-        except Exception:
-            pass
-
-    model.eval()
-    _MODEL_CACHE["CT"] = model
-    return model
+    """CT model is unavailable (fail closed)."""
+    raise RuntimeError("CT model unavailable")
 
 
 def get_mri_model() -> BrainMRINet:
-    """Retrieve cached BrainMRINet model."""
-    global _MODEL_CACHE
-    if "MR" in _MODEL_CACHE:
-        return _MODEL_CACHE["MR"]  # type: ignore
-
-    model = BrainMRINet()
-    weight_file = WEIGHTS_DIR / "mri_brainnet.pt"
-    if weight_file.exists():
-        try:
-            state = torch.load(weight_file, map_location="cpu", weights_only=True)
-            model.load_state_dict(state)
-        except Exception:
-            _init_weights_deterministic(model, seed=202)
-    else:
-        _init_weights_deterministic(model, seed=202)
-        WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-        try:
-            torch.save(model.state_dict(), weight_file)
-        except Exception:
-            pass
-
-    model.eval()
-    _MODEL_CACHE["MR"] = model
-    return model
+    """MRI model is unavailable (fail closed)."""
+    raise RuntimeError("MRI model unavailable")
 
 
 def get_ultrasound_model() -> UltrasoundBIRADSNet:
-    """Retrieve cached UltrasoundBIRADSNet model."""
-    global _MODEL_CACHE
-    if "US" in _MODEL_CACHE:
-        return _MODEL_CACHE["US"]  # type: ignore
-
-    model = UltrasoundBIRADSNet()
-    weight_file = WEIGHTS_DIR / "us_biradsnet.pt"
-    if weight_file.exists():
-        try:
-            state = torch.load(weight_file, map_location="cpu", weights_only=True)
-            model.load_state_dict(state)
-        except Exception:
-            _init_weights_deterministic(model, seed=303)
-    else:
-        _init_weights_deterministic(model, seed=303)
-        WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-        try:
-            torch.save(model.state_dict(), weight_file)
-        except Exception:
-            pass
-
-    model.eval()
-    _MODEL_CACHE["US"] = model
-    return model
+    """Ultrasound model is unavailable (fail closed)."""
+    raise RuntimeError("Ultrasound model unavailable")
 
 
 def get_xr_standalone_model() -> XRChestNet:
-    """Retrieve cached XRChestNet model."""
-    global _MODEL_CACHE
-    if "XR_STANDALONE" in _MODEL_CACHE:
-        return _MODEL_CACHE["XR_STANDALONE"]  # type: ignore
+    """Standalone XR fallback model is unavailable (fail closed)."""
+    raise RuntimeError("Standalone XR model unavailable")
 
-    model = XRChestNet()
-    weight_file = WEIGHTS_DIR / "xr_chestnet.pt"
-    if weight_file.exists():
-        try:
-            state = torch.load(weight_file, map_location="cpu", weights_only=True)
-            model.load_state_dict(state)
-        except Exception:
-            _init_weights_deterministic(model, seed=404)
+
+# ---------------------------------------------------------------------------
+# Baseline DenseNet121 Models (CT, MRI, US)
+# ---------------------------------------------------------------------------
+
+_BASELINE_CACHE: dict[str, tuple[nn.Module, list[str], float, dict[str, Any]]] = {}
+
+
+def normalize_meta(name: str, meta: dict[str, Any]) -> dict[str, Any]:
+    """Return common metadata dictionary across CT, MRI, and US metrics JSON layouts.
+
+    Schema:
+      {name, classes, temperature, accuracy, accuracy_ci, balanced_accuracy,
+       macro_auc, macro_auc_ci, dataset, seed, backbone, status_note, wrong_modality}
+    Absent values are returned as None. Numbers are never invented.
+    """
+    key = name.lower()
+    classes = meta.get("classes")
+    temperature = meta.get("temperature")
+    dataset = meta.get("dataset")
+    seed = meta.get("seed")
+    backbone = meta.get("backbone")
+
+    accuracy = None
+    accuracy_ci = None
+    balanced_accuracy = None
+    macro_auc = None
+    macro_auc_ci = None
+    status_note = None
+    wrong_modality = None
+
+    if key == "mri":
+        m = meta.get("metrics") or {}
+        acc_ci = m.get("accuracy_ci")
+        if isinstance(acc_ci, (list, tuple)) and len(acc_ci) >= 3:
+            accuracy = acc_ci[0]
+            accuracy_ci = [acc_ci[1], acc_ci[2]]
+        elif isinstance(acc_ci, (list, tuple)) and len(acc_ci) == 2:
+            accuracy_ci = list(acc_ci)
+
+        auc_ci = m.get("macro_auc_ci")
+        if isinstance(auc_ci, (list, tuple)) and len(auc_ci) >= 3:
+            macro_auc = auc_ci[0]
+            macro_auc_ci = [auc_ci[1], auc_ci[2]]
+        elif isinstance(auc_ci, (list, tuple)) and len(auc_ci) == 2:
+            macro_auc_ci = list(auc_ci)
+
+        balanced_accuracy = m.get("balanced_accuracy")
+        status_note = meta.get("status") or meta.get("caveats")
+        wrong_modality = meta.get("wrong_modality_test") or meta.get("wrong_modality")
     else:
-        _init_weights_deterministic(model, seed=404)
-        WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-        try:
-            torch.save(model.state_dict(), weight_file)
-        except Exception:
-            pass
+        tm = meta.get("test_metrics") or {}
+        accuracy = tm.get("accuracy")
+        balanced_accuracy = tm.get("balanced_accuracy")
+        macro_auc = tm.get("macro_auc")
+        ci_95 = tm.get("ci_95") or {}
+        if isinstance(ci_95, dict):
+            accuracy_ci = ci_95.get("accuracy")
+            macro_auc_ci = ci_95.get("macro_auc")
+        status_note = meta.get("caveats") or meta.get("status")
+        wrong_modality = meta.get("wrong_modality") or meta.get("wrong_modality_test")
 
-    model.eval()
-    _MODEL_CACHE["XR_STANDALONE"] = model
-    return model
+    return {
+        "name": key,
+        "classes": classes,
+        "temperature": temperature,
+        "accuracy": accuracy,
+        "accuracy_ci": accuracy_ci,
+        "balanced_accuracy": balanced_accuracy,
+        "macro_auc": macro_auc,
+        "macro_auc_ci": macro_auc_ci,
+        "dataset": dataset,
+        "seed": seed,
+        "backbone": backbone,
+        "status_note": status_note,
+        "wrong_modality": wrong_modality,
+    }
+
+
+def load_baseline(name: str) -> tuple[nn.Module, list[str], float, dict[str, Any]]:
+    """Load DenseNet121 baseline classifier for 'mri', 'us', or 'ct'.
+
+    Returns (model, classes, temperature, raw_meta).
+    Raises RuntimeError("<Modality> model unavailable") if:
+      - ENABLE_BASELINE_MODELS != "1"
+      - weights or metrics file is missing
+    Raises RuntimeError with details if state_dict keys do not match.
+    """
+    key = name.lower()
+    valid_names = {"mri": "MRI", "us": "Ultrasound", "ct": "CT"}
+    if key not in valid_names:
+        raise ValueError(f"Unknown baseline model name: {name}. Must be one of {list(valid_names.keys())}")
+
+    modality_label = valid_names[key]
+
+    if os.getenv("ENABLE_BASELINE_MODELS") != "1":
+        raise RuntimeError(
+            f"{modality_label} model unavailable: "
+            "disabled: set ENABLE_BASELINE_MODELS=1 and restart the backend"
+        )
+
+    if key in _BASELINE_CACHE:
+        return _BASELINE_CACHE[key]
+
+    base_weights_dir = Path(__file__).resolve().parent.parent / "weights"
+    weights_path = base_weights_dir / f"{key}_densenet121.pt"
+    metrics_path = base_weights_dir / "metrics" / f"{key}_metrics.json"
+
+    if not weights_path.exists():
+        raise RuntimeError(
+            f"{modality_label} model unavailable: "
+            f"weights file missing: weights/{key}_densenet121.pt"
+        )
+    if not metrics_path.exists():
+        raise RuntimeError(
+            f"{modality_label} model unavailable: "
+            f"metrics file missing: weights/metrics/{key}_metrics.json"
+        )
+
+    try:
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            raw_meta = json.load(f)
+    except Exception as exc:
+        _logger.error(
+            "Failed to read metrics for %s baseline model:\n%s",
+            key, traceback.format_exc(),
+        )
+        raise RuntimeError(
+            f"{modality_label} model unavailable: "
+            f"failed to load weights: {type(exc).__name__}"
+        ) from exc
+
+    classes = raw_meta.get("classes")
+    if not classes or not isinstance(classes, list):
+        raise RuntimeError(f"Invalid classes in {metrics_path}")
+
+    try:
+        temperature = float(raw_meta.get("temperature", 1.0))
+    except (TypeError, ValueError):
+        temperature = 1.0
+
+    try:
+        model = models.densenet121(weights=None)
+        in_features = model.classifier.in_features
+        model.classifier = nn.Linear(in_features, len(classes))
+        state_dict = torch.load(weights_path, map_location="cpu")
+        model.load_state_dict(state_dict, strict=True)
+        model.eval()
+    except RuntimeError as re:
+        if any(phrase in str(re) for phrase in ["Missing key(s)", "Unexpected key(s)", "size mismatch"]):
+            _logger.error(
+                "State-dict mismatch loading %s baseline model:\n%s",
+                key, traceback.format_exc(),
+            )
+            raise RuntimeError(
+                f"{modality_label} model unavailable: "
+                f"failed to load weights: {type(re).__name__}"
+            ) from re
+        raise
+    except Exception as exc:
+        _logger.error(
+            "Unexpected error loading %s baseline model:\n%s",
+            key, traceback.format_exc(),
+        )
+        raise RuntimeError(
+            f"{modality_label} model unavailable: "
+            f"failed to load weights: {type(exc).__name__}"
+        ) from exc
+
+    _BASELINE_CACHE[key] = (model, classes, temperature, raw_meta)
+    return _BASELINE_CACHE[key]
