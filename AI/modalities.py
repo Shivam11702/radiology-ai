@@ -39,6 +39,10 @@ MODALITY_MODELS = {
         "task": "multi-pathology thoracic classification",
         "type": "Production MVP (DenseNet121)",
         "status": "live",
+        "benchmark_metrics": {
+            "lung_opacity_auc": 0.940,
+            "brier_test": 0.117,
+        },
     },
     "CT": {
         "name": "Chest CT DenseNet121",
@@ -46,6 +50,11 @@ MODALITY_MODELS = {
         "task": "research baseline classification (adenocarcinoma, large_cell, normal, squamous)",
         "type": "Research Baseline (DenseNet121)",
         "status": "research_baseline (disabled by default; requires ENABLE_BASELINE_MODELS=1)",
+        "benchmark_metrics": {
+            "accuracy": 0.594,
+            "balanced_accuracy": 0.677,
+            "macro_auc": 0.885,
+        },
     },
     "MR": {
         "name": "Brain MRI DenseNet121",
@@ -53,6 +62,10 @@ MODALITY_MODELS = {
         "task": "research baseline classification (glioma, meningioma, notumor, pituitary)",
         "type": "Research Baseline (DenseNet121)",
         "status": "research_baseline (disabled by default; requires ENABLE_BASELINE_MODELS=1)",
+        "benchmark_metrics": {
+            "accuracy": 0.894,
+            "macro_auc": 0.975,
+        },
     },
     "US": {
         "name": "Breast Ultrasound DenseNet121",
@@ -60,6 +73,10 @@ MODALITY_MODELS = {
         "task": "research baseline classification (benign, malignant, normal)",
         "type": "Research Baseline (DenseNet121)",
         "status": "research_baseline (disabled by default; requires ENABLE_BASELINE_MODELS=1)",
+        "benchmark_metrics": {
+            "accuracy": 0.800,
+            "macro_auc": 0.922,
+        },
     },
 }
 

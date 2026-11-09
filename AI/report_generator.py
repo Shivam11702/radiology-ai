@@ -135,9 +135,30 @@ def _build_dynamic_findings(
 ) -> str:
     """Build dynamic, data-driven medical findings tailored to detected anatomy and metrics."""
     if "Research Baseline" in str(model_version) or extra == "research_baseline":
+        mm = (telemetry or {}).get("model_metrics") or {}
+        metrics_summary = ""
+        if mm:
+            acc = mm.get("accuracy")
+            acc_ci = mm.get("accuracy_ci")
+            auc = mm.get("macro_auc")
+            auc_ci = mm.get("macro_auc_ci")
+            bal_acc = mm.get("balanced_accuracy")
+            parts = []
+            if acc is not None:
+                ci_str = f" (95% CI: {acc_ci[0]:.1%}-{acc_ci[1]:.1%})" if (acc_ci and len(acc_ci) == 2) else ""
+                parts.append(f"Hold-out Accuracy: {acc:.1%}{ci_str}")
+            if bal_acc is not None:
+                parts.append(f"Balanced Accuracy: {bal_acc:.1%}")
+            if auc is not None:
+                ci_str = f" (95% CI: {auc_ci[0]:.3f}-{auc_ci[1]:.3f})" if (auc_ci and len(auc_ci) == 2) else ""
+                parts.append(f"Macro AUC: {auc:.3f}{ci_str}")
+            if parts:
+                metrics_summary = f"<br/><b>Dataset Benchmark Performance:</b> {', '.join(parts)}."
+
         return (
             f"RESEARCH BASELINE (NOT CLINICALLY VALIDATED): {modality} DenseNet121 model trained on public dataset only. "
-            f"Predicted dataset class: {primary_label} (uncalibrated probability: {confidence:.1%}).<br/>"
+            f"Predicted dataset class: {primary_label} (uncalibrated probability: {confidence:.1%})."
+            f"{metrics_summary}<br/>"
             f"DISCLAIMER: Probabilities are uncalibrated and baseline classifiers produce confident answers on wrong-modality images. "
             f"This model has not been clinically validated and must not be used for diagnostic interpretation."
         )
@@ -301,6 +322,7 @@ def _build_dynamic_impression(
     tel = telemetry or {}
     loc = tel.get("anatomical_location") or "visualized field"
     conf_pct = round(confidence * 100, 1)
+    sev_str = f" ({severity.capitalize()} severity)" if severity else ""
 
     if modality == "CT":
         if "No Acute" in primary_label:

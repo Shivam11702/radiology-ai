@@ -19,3 +19,5 @@ cryptography>=42.0.0
 # Day 2+3: Real AI model
 torchxrayvision>=1.3.0
 captum>=0.7.0
+scikit-learn>=1.4.0
+pytest>=8.0.0

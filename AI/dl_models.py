@@ -21,6 +21,12 @@ import traceback
 from pathlib import Path
 from typing import Any, Tuple
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
 _logger = logging.getLogger(__name__)
 
 import numpy as np

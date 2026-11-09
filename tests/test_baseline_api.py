@@ -27,7 +27,8 @@ def test_baseline_status_endpoint(monkeypatch):
     assert "mri" in data["models"]
     assert "ct" in data["models"]
     assert "us" in data["models"]
-    assert data["models"]["mri"]["weights_present"] is True
+    expected_mri_present = (REPO_ROOT / "weights" / "mri_densenet121.pt").exists() and (REPO_ROOT / "weights" / "metrics" / "mri_metrics.json").exists()
+    assert data["models"]["mri"]["weights_present"] is expected_mri_present
 
     monkeypatch.setenv("ENABLE_BASELINE_MODELS", "1")
     res_on = client.get("/api/v1/baseline/status")

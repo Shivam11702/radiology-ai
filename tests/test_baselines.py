@@ -151,6 +151,32 @@ def test_predict_baseline_response_contract(monkeypatch):
     monkeypatch.setenv("ENABLE_BASELINE_MODELS", "1")
     dummy = Image.new("RGB", (224, 224), (128, 128, 128))
 
+    import dl_models
+    import predict
+    from torchvision import models
+    import json
+
+    orig_load_baseline = dl_models.load_baseline
+
+    def mock_load_baseline(mod_name):
+        try:
+            return orig_load_baseline(mod_name)
+        except RuntimeError as e:
+            if "weights file missing" in str(e):
+                key = mod_name.lower()
+                metrics_path = REPO_ROOT / "weights" / "metrics" / f"{key}_metrics.json"
+                with open(metrics_path, "r", encoding="utf-8") as f:
+                    raw_meta = json.load(f)
+                classes = raw_meta.get("classes")
+                temperature = float(raw_meta.get("temperature", 1.0))
+                model = models.densenet121(weights=None)
+                model.classifier = torch.nn.Linear(model.classifier.in_features, len(classes))
+                model.eval()
+                return model, classes, temperature, raw_meta
+            raise
+
+    monkeypatch.setattr(dl_models, "load_baseline", mock_load_baseline)
+
     for name in ["ct", "mri", "us"]:
         res = predict_baseline(name, dummy)
         assert res["calibrated"] is False

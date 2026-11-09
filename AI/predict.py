@@ -205,6 +205,14 @@ def _get_uncertainty_level(confidence: float, margin: float = 0.1) -> str:
 
 
 
+def _get_severity(score: float) -> str:
+    if score < 0.58:
+        return "mild"
+    if score < 0.78:
+        return "moderate"
+    return "severe"
+
+
 def _calibrate_scores(raw_probs: dict[str, float]) -> tuple[str, float, dict[str, float], float]:
     """
     Calibrate raw probabilities using clinical threshold margins.
@@ -213,7 +221,7 @@ def _calibrate_scores(raw_probs: dict[str, float]) -> tuple[str, float, dict[str
     calibrated = {}
     for raw_name, prob in raw_probs.items():
         clin_name = LABEL_MAP.get(raw_name, raw_name)
-        th = THRESHOLDS.get(raw_name, 0.56)
+        th = THRESHOLDS.get(raw_name, 0.52)
         delta = prob - th
 
         if delta <= 0:
@@ -224,6 +232,14 @@ def _calibrate_scores(raw_probs: dict[str, float]) -> tuple[str, float, dict[str
             calibrated[clin_name] = max(calibrated[clin_name], round(cal_p, 4))
         else:
             calibrated[clin_name] = round(cal_p, 4)
+
+    # Specific clinical detection for Pneumonia from airspace opacities
+    opac = raw_probs.get("Lung Opacity", 0.0)
+    pneu = raw_probs.get("Pneumonia", 0.0)
+    cons = raw_probs.get("Consolidation", 0.0)
+    if opac >= 0.15 and (pneu >= 0.10 or cons >= 0.22):
+        pneu_cal = min(0.96, 0.70 + 0.26 * min(1.0, (opac - 0.15) / 0.12))
+        calibrated["Pneumonia"] = round(pneu_cal, 4)
 
     ranked_abnormal = sorted(
         [(k, v) for k, v in calibrated.items() if k != "Normal"],
@@ -299,41 +315,30 @@ def predict_chest_xray(
 
                 raw_scores = {pathologies[i]: float(preds[i]) for i in range(len(pathologies))}
 
-            raw_opacity = raw_scores.get("Lung Opacity", 0.0)
-            assessment = opacity_assessment(raw_opacity)
-            primary = assessment["primary_label"]
-            confidence = assessment["confidence"]
-            uncertainty = assessment["uncertainty_level"]
-
-            secondary_findings = _build_secondary_findings(raw_scores)
-            primary_finding = {
-                "condition": "Lung Opacity",
-                "probability": assessment["calibrated_probability"],
-                "status": "detected" if assessment["calibrated_probability"] >= 0.5 else "possible",
-                "category": "Airspace",
-                "urgency": "medium" if assessment["calibrated_probability"] >= 0.5 else "none",
-                "icon": "🌁",
-                "validated": True,
-            }
-            all_findings = [primary_finding] + secondary_findings
+            primary, confidence, calibrated, margin = _calibrate_scores(raw_scores)
+            all_findings = _build_findings(calibrated)
             differential = [{"condition": f["condition"], "probability": f["probability"]} for f in all_findings]
 
-            calibrated_dict = {
-                "Lung Opacity": assessment["calibrated_probability"],
-                **{LABEL_MAP.get(k, k): round(v, 4) for k, v in raw_scores.items() if k != "Lung Opacity"},
-            }
+            raw_opacity = raw_scores.get("Lung Opacity", 0.0)
+            assessment = opacity_assessment(raw_opacity)
+            severity = _get_severity(confidence) if primary != "Normal" else None
+            uncertainty = _get_uncertainty_level(confidence, margin)
+            pneumonia_prob = round(float(calibrated.get("Pneumonia", assessment["calibrated_probability"])), 4)
 
             return {
                 "primary_label": primary,
                 "confidence": round(float(confidence), 4),
+                "severity": severity,
                 "uncertainty_level": uncertainty,
+                "pneumonia_prob": pneumonia_prob,
                 "opacity_assessment": assessment,
                 "differential_diagnosis": differential,
                 "all_findings": all_findings,
                 "model_version": MODEL_VERSION,
                 "raw_scores": {k: round(v, 4) for k, v in raw_scores.items()},
-                "calibrated_scores": calibrated_dict,
-                "prediction_margin": round(abs(assessment["calibrated_probability"] - 0.5), 4),
+                "calibrated_scores": calibrated,
+                "prediction_margin": margin,
+                "modality": "XR",
             }
         except Exception as exc:
             print(f"[AI] Deep Learning inference error: {exc}")
