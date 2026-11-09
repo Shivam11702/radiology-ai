@@ -31,6 +31,19 @@ Place the trained weights in the repo-root `weights/` directory:
 
 These files are listed in `.gitignore` (`weights/*.pt`) and are **never committed to the repository**.
 
+### Automated Checkpoint Setup
+
+To generate or initialize DenseNet121 model checkpoints matching the exact architectures, heads, and classes in `weights/metrics/` for local testing and demonstrations, run:
+
+```bash
+# Windows
+backend\venv\Scripts\python.exe scripts\setup_baseline_weights.py
+
+# Linux / macOS
+python scripts/setup_baseline_weights.py
+```
+This automatically produces `weights/mri_densenet121.pt`, `weights/us_densenet121.pt`, and `weights/ct_densenet121.pt`.
+
 Metrics JSONs (tracked):
 
 | File | Contents |

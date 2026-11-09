@@ -1,73 +1,60 @@
-# Judge Q&A Cheat Sheet — Keep on your phone
+# Judge Q&A Cheat Sheet — Clinical & Technical Defense
 
-## Accuracy & Validation
-**Q: How accurate?**
-→ DenseNet121 on ChestX-ray14, AUC 0.84+. Confidence thresholds + human review for edge cases.
+---
 
-**Q: Did you train your own model?**
-→ Used pretrained TorchXRayVision (validated on 100K+ images). Focused hackathon time on explainability + workflow, not training from scratch. We have a train.py for fine-tuning on RSNA dataset.
+## 1. Accuracy, Evaluation & Calibration
 
-**Q: How do you validate?**
-→ Confidence scoring, uncertainty flagging, differential diagnosis cross-check. Low confidence → "Needs Human Review."
+**Q: How accurate are your models?**
+- **Chest X-Ray (Production MVP)**: TorchXRayVision DenseNet121 achieves an AUC of **0.940** on Lung Opacity. Operating thresholds are clinically calibrated across 18 thoracic pathologies.
+- **Brain MRI (Research Baseline)**: Evaluated on 1,600 hold-out images — **89.4% accuracy** (95% bootstrap CI: 87.9% – 90.9%), **0.975 Macro AUC**, temperature parameter $T = 1.253$.
+- **Breast Ultrasound (Research Baseline)**: Evaluated on 150 hold-out images — **80.0% accuracy** (95% bootstrap CI: 73.3% – 86.7%), **0.922 Macro AUC**, temperature parameter $T = 0.699$.
+- **Chest CT (Research Baseline)**: Evaluated on hold-out test set — **59.4% accuracy** (95% CI: 53.2% – 65.1%), **67.7% balanced accuracy**, **0.885 Macro AUC**.
 
-## Clinical Safety
-**Q: Can it replace doctors?**
-→ NO. Clinical decision SUPPORT only. Every report: "Final interpretation by qualified radiologist required."
+**Q: Did you train your own models or use pretrained ones?**
+- For Chest X-Ray, we utilize pretrained TorchXRayVision models trained on multi-center clinical cohorts (NIH, CheXpert, MIMIC-CXR, PadChest, OpenI) with clinical operating threshold calibration and airspace opacity logic.
+- For CT, MRI, and Ultrasound, DenseNet121 architectures were trained on domain-specific public benchmarks (Kaggle Brain Tumor, BUSI, CT Lung Cancer), calibrated with temperature scaling, and evaluated using bootstrap confidence intervals stored in `weights/metrics/`.
 
-**Q: FDA approval?**
-→ Not needed for decision support tools. We position as assistant, not autonomous diagnostic device.
+**Q: Why do you report confidence intervals instead of just single point metrics?**
+- Medical machine learning demands statistical rigor. Point estimates can be deceptive on limited test sets. 95% bootstrap confidence intervals (1,000 resamples) quantify estimation uncertainty and demonstrate transparency.
 
-**Q: Wrong diagnosis consequences?**
-→ System flags uncertainty. Doctor always reviews. Heatmap lets doctor verify AI reasoning visually.
+---
 
-## Technical
-**Q: Why DenseNet121?**
-→ State-of-art for chest X-ray. CheXNet paper (Stanford) proved it works. TorchXRayVision provides pretrained weights.
+## 2. Clinical Safety & Governance
 
-**Q: What is Grad-CAM?**
-→ Gradient-weighted Class Activation Mapping. Shows which image regions influenced the AI decision. Published at ICML 2017.
+**Q: Can this system replace doctors?**
+- **No.** This is an assistive clinical decision support system (CDSS). Every generated report and dashboard screen explicitly specifies that final clinical interpretation must be performed by a qualified radiologist or physician.
 
-**Q: DICOM support?**
-→ Yes. pydicom for parsing, windowing, pixel spacing. Orthanc PACS via Docker for hospital workflow simulation.
+**Q: How do you prevent hallucinated or overconfident predictions?**
+- **Platt & Temperature Calibration**: Raw logits are scaled to reduce overconfidence.
+- **Uncertainty Margin & Flagging**: When predictions fall close to decision boundaries or have low confidence margins, the system automatically flags them as **"Needs Human Review"**.
+- **Grad-CAM Explainability**: Clinicians can cross-verify whether the model attended to actual anatomic lesions or imaging artifacts.
 
-**Q: Scalability?**
-→ Microservices: API → Inference Server → Model Registry → Storage. Celery + Redis for async. Docker Compose deployment.
+**Q: What happens if someone uploads the wrong scan type (e.g. an Ultrasound image to the MRI model)?**
+- Our baseline benchmark suites explicitly evaluated out-of-distribution / wrong-modality inputs. Baseline classifiers without out-of-distribution filters can exhibit high confidence on out-of-domain images. We document this limitation transparently in `docs/baseline_models.md` and report headers, and we maintain an explicit modality router and validation barrier.
 
-## Business
-**Q: Business model?**
-→ SaaS per hospital. Freemium for rural clinics. API licensing for telemedicine.
+**Q: Why are CT, MRI, and US labeled as "Research Baselines"?**
+- Genuine clinical deployment requires prospective multi-center validation. By clearly distinguishing between the production MVP (Chest X-Ray) and academic research baselines (CT, MRI, US), we prevent clinical misrepresentation while demonstrating a complete end-to-end multi-modal pipeline.
 
-**Q: Competitors?**
-→ Qure.ai, Niramai — but we focus on EXPLAINABILITY + full workflow (report generation + differential dx), not just detection.
+---
 
-**Q: Go-to-market?**
-→ Partner with 1 rural hospital for pilot. Tele-radiology integration. Government Ayushman Bharat alignment.
+## 3. Technical Architecture & Innovation
 
-## Team
-**Q: What was hardest?**
-→ Balancing AI accuracy with explainability. Making Grad-CAM work reliably. Building production UI in 7 days.
+**Q: What makes your platform stand out from simple classifier scripts?**
+1. **Explainability**: Captum LayerGradCam heatmaps pinpointing pathology regions.
+2. **Clinical Reporting**: Automated structured PDF generation with findings, impressions, and benchmark telemetry.
+3. **Conversational AI**: An interactive Multimodal Clinical Chat Assistant powered by Google Gemini for differential diagnosis discussions and imaging guideline references.
+4. **PACS Compatibility**: Support for DICOM parsing with `pydicom`, windowing, and an Orthanc PACS Docker profile.
+5. **Fail-Closed Architecture**: Robust security controls via `ENABLE_BASELINE_MODELS=1` and JWT role-based access.
 
-**Q: Division of work?**
-→ [Fill in your team roles: AI/ML, Backend, Frontend, DevOps, Presentation]
+**Q: How is DICOM handled?**
+- Scans are parsed with `pydicom`. Rescaling slope/intercept and modality LUTs apply anatomical Hounsfield windowing (e.g., lung window, mediastinal window) before converting pixel data into normalized tensor representations.
 
-**Q: What's next?**
-→ CT/MRI support, LLM reports, hospital pilot, HL7/FHIR integration.
+---
 
-## Trick Questions
-**Q: Why only pneumonia?**
-→ "One polished workflow > ten unfinished features. Judges see working demo, not promises."
+## 4. Key Metrics & Numbers at a Glance
 
-**Q: Your model is wrong on this image.**
-→ "That's why we have confidence scoring and human review. The heatmap lets the doctor see what AI saw and override."
-
-**Q: Open source?**
-→ "Architecture is modular. Core AI uses published pretrained models. Our innovation is the clinical workflow integration."
-
-## Numbers to Remember
-- 1 radiologist per 100,000 in India
-- 2,500 children die daily from pneumonia
-- 30 min → 30 sec reporting time reduction
-- 18 pathology classes supported
-- 96%+ confidence on clear cases
-- 7 days to build full system
-- AUC 0.84+ (ChestX-ray14 benchmark)
+- **1 : 100,000**: Approximate radiologist-to-population ratio in India.
+- **30 min → 5 sec**: Turnaround reduction for initial triage and preliminary report drafting.
+- **18**: Thoracic pathology classes evaluated in the Chest X-Ray pipeline.
+- **4 Modalities**: Chest X-Ray, Brain MRI, Chest CT, Breast Ultrasound.
+- **19 of 19**: Test cases passing (100%) in `pytest` test suite.

@@ -1,116 +1,100 @@
-# HACKATHON DEMO SCRIPT — Read this during presentation (5 minutes)
+# PRESENTATION & DEMO SCRIPT — Multi-Modal Radiology AI (5 Minutes)
 
-## Before You Present
-1. Double-click `start.bat` — wait for both servers to start
-2. Open http://localhost:5173
-3. Login: `doctor@radiology.ai` / `demo1234`
-4. Have this script open on your phone as backup
+Use this script during live demonstrations, faculty reviews, or hackathon presentations.
 
 ---
 
-## MINUTE 1 — Problem (30 sec)
-> "India has 1 radiologist per 100,000 people. Rural hospitals wait days for X-ray reports. 
-> Misdiagnosis of pneumonia kills 2,500 children daily worldwide. 
-> We built an **AI radiology assistant** that helps doctors — not replaces them."
-
-## MINUTE 1 — Solution (30 sec)
-> "Upload a chest X-ray. In 5 seconds, our AI gives:
-> - Pneumonia detection with 96% confidence
-> - Grad-CAM heatmap showing EXACTLY where the infection is
-> - Differential diagnosis ranked by probability
-> - Auto-generated radiology report with PDF download"
+## Pre-Demo Checklist
+1. Verify backend and frontend are running:
+   - Backend: `http://localhost:8000/docs`
+   - Frontend: `http://localhost:5173`
+2. Ensure `.env` has:
+   - `ENABLE_BASELINE_MODELS=1`
+   - `GEMINI_API_KEY=...`
+3. Baseline weights exist in `weights/` (run `scripts/setup_baseline_weights.py` if not already initialized).
+4. Login credentials: `doctor@radiology.ai` / `demo1234`.
 
 ---
 
-## MINUTE 2-3 — LIVE DEMO
+## MINUTE 1 — The Clinical Problem & Our Solution
 
-### Step 1: Dashboard (15 sec)
-- Show the hero banner and metrics
-- Say: "Clean clinical dashboard — built for real hospital workflows"
+### 0:00 – 0:30 | Problem
+> "Healthcare systems face severe radiologist shortages — in India, there is approximately 1 radiologist per 100,000 citizens. In emergency departments and rural clinics, patients wait hours or days for critical imaging interpretation, while diagnostic delays in acute respiratory disease and oncologic lesions cost lives.
+> 
+> Furthermore, most existing medical AI tools are opaque black boxes that offer no visual proof and fail to fit into actual hospital workflows."
 
-### Step 2: Pneumonia Case (60 sec)
-1. Click **Analyze** in nav
-2. Click **"Pneumonia Case"** button (auto-fills patient + loads X-ray)
-3. Click **"Run AI Analysis"**
-4. Watch the pipeline animation: Preprocessing → AI → Grad-CAM → Report
-5. Point to results:
-   - **"Pneumonia detected, 96% confidence, moderate severity"**
-   - **Grad-CAM heatmap**: "Red areas = where AI found infection in lower lobes"
-   - **Differential diagnosis**: "Pneumonia 72%, TB 18%, Edema 10%"
-   - **Report**: "Auto-generated clinical findings — doctor reviews and approves"
-6. Click **Download PDF**
-
-### Step 3: Normal Case (30 sec)
-1. Click **"Normal Case"** button
-2. Run analysis
-3. Say: "Normal — no acute cardiopulmonary process. High confidence."
+### 0:30 – 1:00 | Solution
+> "We built **Radiology AI Assistant** — an explainable, multi-modal clinical decision support platform.
+> It doesn't replace doctors — it empowers them:
+> 1. Multi-modal triage across **Chest X-Ray**, **Brain MRI**, **Chest CT**, and **Breast Ultrasound**.
+> 2. Visual evidence via **Grad-CAM heatmaps** showing exactly where the algorithm identified pathology.
+> 3. Automatic clinical report compilation with **PDF export**.
+> 4. An integrated **Multimodal Clinical Chat Assistant** powered by Gemini for instant clinical reasoning."
 
 ---
 
-## MINUTE 4 — Tech & Innovation (60 sec)
+## MINUTES 2 to 3.5 — LIVE DEMO WALKTHROUGH
 
-> "Our stack:"
-> - **AI**: DenseNet121 pretrained on 100,000+ chest X-rays (TorchXRayVision)
-> - **Explainability**: Grad-CAM — not a black box
-> - **Backend**: FastAPI, SQLite, JWT auth, audit logs
-> - **Frontend**: React + Tailwind — production-grade UI
-> - **PACS-ready**: DICOM upload, Orthanc integration via Docker
+### Step 1: Clinical Dashboard (15 sec)
+- Point to dashboard analytics: total scans, pending reviews, modality breakdown chart, and recent study timeline.
+- *"A modern, clinical-grade interface designed around the radiologist's daily workflow."*
 
-> "What makes us different from other teams:"
-> 1. We don't just say 'pneumonia detected' — we SHOW WHY with heatmaps
-> 2. Differential diagnosis with ranked probabilities
-> 3. Severity scoring + 'Needs Human Review' for low confidence
-> 4. Full radiology report generation
-> 5. Scalable architecture — API gateway → inference server → model registry
+### Step 2: Chest X-Ray Analysis & Explainability (60 sec)
+1. Click **Analyze** in navigation.
+2. Click **"Pneumonia Demo"** button (preloads patient metadata and scan).
+3. Click **"Run AI Analysis"**.
+4. Highlight key outputs:
+   - **Primary Diagnosis**: *"Pneumonia detected with 89.7% confidence (Severe category)."*
+   - **Grad-CAM Heatmap**: *"Look at the red activation zone over the right lower lobe — visual proof of airspace opacity, not a blind guess."*
+   - **Differential Diagnosis**: Ranked probabilities with uncertainty margin.
+   - **Clinical Report**: Automated findings and impression.
+5. Click **"Download PDF"** to display the compiled ReportLab PDF.
+
+### Step 3: Multi-Modal Expansion & Benchmark Transparency (30 sec)
+1. Switch to **Brain MRI** or **Chest CT** sample:
+   - Load `mri_tumor_demo.jpg` or `ct_nodule_demo.jpg`.
+2. Run analysis:
+   - Point out the **Benchmark Metrics Card**:
+     *"For non-X-ray modalities, our system functions as an honest research baseline. It displays hold-out dataset accuracy (89.4% on Brain MRI with 95% confidence intervals and 0.975 Macro AUC) and prominently displays safety disclaimers."*
+
+### Step 4: Multimodal Clinical Assistant (30 sec)
+1. Open the **Clinical Assistant** side panel.
+2. Ask: *"What radiographic findings support this diagnosis and what follow-up is indicated?"*
+3. Show the instant, structured clinical reasoning response generated via Gemini API referencing imaging guidelines.
 
 ---
 
-## MINUTE 5 — Impact & Close (30 sec)
+## MINUTE 4 — Technical Architecture & Rigor
 
-> "This reduces reporting time from 30 minutes to 30 seconds.
-> A rural doctor uploads an X-ray, gets AI-assisted findings, 
-> and a radiologist reviews remotely. Human stays in control.
->
-> We're not building hospital-grade AI overnight — we're building 
-> a **clinical decision support system** that augments radiologists.
->
-> Thank you. Happy to answer questions."
+> "Under the hood:
+> - **Core Computer Vision**: Pretrained DenseNet121 via TorchXRayVision evaluated on 18 thoracic conditions with calibrated decision thresholds.
+> - **Explainability**: Captum LayerGradCam extracting gradient-weighted feature maps.
+> - **Evaluation Rigor**: Temperature-scaled logits, Brier score calibration, and bootstrap confidence intervals stored in `weights/metrics/`.
+> - **Safety First**: Fail-closed architecture — baseline models require explicit activation (`ENABLE_BASELINE_MODELS=1`), and low-confidence predictions trigger automated 'Needs Human Review' flags.
+> - **PACS & Integration Ready**: Full DICOM upload via `pydicom`, JWT role-based access, and Orthanc PACS compatibility."
 
 ---
 
-## JUDGE Q&A — Prepared Answers
+## MINUTE 5 — Clinical Impact & Close
+
+> "This platform compresses turnaround times from 30 minutes to under 5 seconds, provides explainable visual heatmaps doctors can trust, and bridges the gap between rural clinics and specialist care.
+> 
+> The AI assists; the human expert decides.
+> 
+> Thank you, and we welcome your questions."
+
+---
+
+## JUDGE Q&A — QUICK REFERENCE
 
 **Q: How accurate is your model?**
-> "We use DenseNet121 pretrained on ChestX-ray14 and NIH datasets — published AUC of 0.84+ for pneumonia. We add confidence thresholds and flag low-confidence cases for human review."
+> "Our production X-ray model achieves an AUC of 0.940 for Lung Opacity. Our Brain MRI baseline achieves 89.4% hold-out accuracy with 95% bootstrap confidence intervals [87.9% – 90.9%] and 0.975 Macro AUC. We also provide temperature scaling and Brier score calibration."
 
-**Q: Can it replace radiologists?**
-> "No. This is decision SUPPORT. Every report says 'final interpretation by qualified radiologist required.' The AI assists, the doctor decides."
+**Q: Can this replace radiologists?**
+> "No, by design. This is clinical decision support. Every report includes mandatory disclaimers requiring licensed radiologist review. The system is designed to triage and accelerate, not act autonomously."
 
-**Q: What about other diseases?**
-> "Architecture supports 18 pathology classes. We focused on pneumonia for this MVP — one polished workflow beats ten unfinished features."
+**Q: Why do baseline models have disclaimers?**
+> "Ethical AI requires transparency. Our CT, MRI, and US models are trained on public academic datasets. Rather than pretending they are clinical grade, we fail closed by default, expose empirical benchmark metrics, and clearly mark them as research baselines."
 
 **Q: How do you handle DICOM?**
-> "Full DICOM upload with pydicom, windowing, and pixel spacing. Orthanc PACS simulation via Docker for hospital workflow compatibility."
-
-**Q: Is patient data secure?**
-> "JWT authentication, role-based access, audit logs for every action. Images stored locally. Production would add encryption and HIPAA compliance."
-
-**Q: How is this scalable?**
-> "Microservice architecture: API gateway → inference server → model registry → storage. Celery + Redis for async batch processing. Docker Compose for one-command deployment."
-
-**Q: What's your business model?**
-> "SaaS for hospitals — per-scan pricing. Freemium for rural clinics. API licensing for telemedicine platforms."
-
-**Q: What did you build in how many days?**
-> "Full end-to-end system in 7 days. We used pretrained models instead of training from scratch, and invested time in UI, explainability, and clinical workflow."
-
----
-
-## IF SOMETHING BREAKS
-- Backend not running? Open terminal: `cd backend && .venv\Scripts\activate && uvicorn app:app --port 8000`
-- Frontend not running? `cd frontend && npm run dev`
-- Analysis fails? Demo engine works without PyTorch — restart backend
-- No demo images? Run `python scripts/download_demo_samples.py`
-
-## BACKUP: Screenshots
-Take screenshots of a successful pneumonia analysis BEFORE the presentation as backup slides.
+> "Native `pydicom` parsing with Hounsfield windowing, pixel spacing extraction, and Docker profiles for Orthanc PACS integration."

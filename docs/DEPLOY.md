@@ -20,16 +20,20 @@ Requires Docker Desktop running.
 ### 1. Backend on Render
 
 1. Go to [Render Dashboard](https://dashboard.render.com/) → **New** → **Blueprint**
-2. Connect GitHub repo `abhinavshekhar/radiology-ai`
+2. Connect GitHub repo `Shivam11702/radiology-ai`
 3. Render reads `render.yaml` and creates:
    - **radiology-ai-api** (FastAPI + PyTorch CPU Docker image)
    - **radiology-ai-redis** (job queue)
-4. Wait for the API build (~10–15 min first time — PyTorch image is large)
-5. Copy the API URL, e.g. `https://radiology-ai-api.onrender.com`
+4. Set environment variables on Render:
+   - `ENABLE_BASELINE_MODELS` = `1`
+   - `GEMINI_API_KEY` = `your-gemini-key`
+   - `GEMINI_MODEL` = `gemini-1.5-flash`
+5. Wait for the API build (~10–15 min first time — PyTorch image is large)
+6. Copy the API URL, e.g. `https://radiology-ai-api.onrender.com`
 
 ### 2. Frontend on Vercel
 
-1. Go to [Vercel](https://vercel.com/new) → Import `abhinavshekhar/radiology-ai`
+1. Go to [Vercel](https://vercel.com/new) → Import `Shivam11702/radiology-ai`
 2. Set **Root Directory** to `frontend`
 3. Add environment variable:
    - `VITE_API_URL` = `https://radiology-ai-api.onrender.com/api/v1`
@@ -52,7 +56,7 @@ Replace with your actual Vercel URL.
 ## Option C — Full stack on a VPS
 
 ```bash
-git clone https://github.com/abhinavshekhar/radiology-ai.git
+git clone https://github.com/Shivam11702/radiology-ai.git
 cd radiology-ai/docker
 docker compose up -d --build
 ```
